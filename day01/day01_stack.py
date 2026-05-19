@@ -14,6 +14,6 @@ class Day01Stack(Stack):
 
         # example resource
         queue = sqs.Queue(
-            self, "Day01Queue",
+            self, "Queue",
             visibility_timeout=Duration.seconds(300),
         )
