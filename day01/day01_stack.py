@@ -1,6 +1,9 @@
 from aws_cdk import (
     Duration,
     Stack,
+    aws_iam as iam,
+    aws_cloudwatch as cloudwatch,
+    aws_cloudwatch_actions as cw_actions,
     aws_sqs as sqs,
     aws_logs as logs,
     aws_sns as sns,
@@ -76,3 +79,41 @@ class Day01Stack(Stack):
                 include_execution_data=True
             )
         )
+
+        # ---------------------------------------------------------------------
+        # 3. IAM POLICIES & SECURITY
+        # ---------------------------------------------------------------------
+
+        # CDK automatically builds minimal-privilege roles for Log Groups and X-Ray.
+        # If an external service or Lambda needs to trigger this State Machine,
+        # you can explicitly grant execution rights like this:
+
+        trigger_role = iam.Role(
+            self, "ExternalTriggerRole",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com")
+        )
+        state_machine.grant_start_execution(trigger_role)
+
+        # ---------------------------------------------------------------------
+        # 4. CLOUDWATCH ALARMS & SNS ALERTS
+        # ---------------------------------------------------------------------
+
+        # Create a metric for failed executions
+        failure_metric = state_machine.metric_failed(
+            period=Duration.minutes(5),
+            statistic="Sum"
+        )
+
+        # Trigger alarm if even 1 execution fails within a 5-minute window
+        failure_alarm = cloudwatch.Alarm(
+            self, "StateMachineFailureAlarm",
+            metric=failure_metric,
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            alarm_description="Alarm if the Step Function execution fails.",
+            # critical_metric_alarm=True
+        )
+
+        # Link the Alarm to the SNS Topic
+        failure_alarm.add_alarm_action(cw_actions.SnsAction(error_topic))
